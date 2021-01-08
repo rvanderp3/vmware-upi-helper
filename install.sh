@@ -1,4 +1,16 @@
 
+BASE_VM=node-4.6.8
+RESOURCE_POOL=default
+CPU_CORES=2
+DATASTORE=vanderdisk
+VM_NAME=test-0
+VM_NAMESERVER=192.168.1.215
+VM_GATEWAY=192.168.122.1
+VM_IP=192.168.122.233
+VM_NETMASK=255.255.255.0
+MEMORY_MB=8192
+DISK_SIZE=40G
+ROLE=master
 
 API_ENDPOINTS=()
 MCO_ENDPOINTS=()
@@ -173,8 +185,8 @@ function enableSingleMaster() {
 }
 
 function restartWorkers() {
-    govc vm.power -off=true worker*
-    govc vm.power -on=true worker*
+    govc vm.power -off=true $INFRA_NAME-worker*
+    govc vm.power -on=true $INFRA_NAME-worker*
 }
 
 function approveCSRs() {
@@ -203,7 +215,8 @@ function waitForInstallCompletion() {
 }
 
 function destroyCluster() {
-    govc vm.destroy bootstrap
-    govc vm.destroy master*
-    govc vm.destroy worker*
+    govc vm.destroy $INFRA_NAME-bootstrap
+    govc vm.destroy $INFRA_NAME-infra
+    govc vm.destroy $INFRA_NAME-master*
+    govc vm.destroy $INFRA_NAME-worker*
 }
