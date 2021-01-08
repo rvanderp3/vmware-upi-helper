@@ -1,0 +1,1 @@
+{"ignition":{"config":{"merge":[{"source":"http://$INFRA_IP:9999"}]},"security":{"tls":{"certificateAuthorities":[]}},"version":"3.1.0"}}
