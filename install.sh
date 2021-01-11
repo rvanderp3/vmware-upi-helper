@@ -198,6 +198,13 @@ function disableMasterSchedulable() {
     oc patch Scheduler/cluster --type merge --patch '{"spec":{"mastersSchedulable":false}}'
 }
 
+function setupRegistry() {
+    oc create -f image-registry-rwo-pvc.yaml
+    oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"managementState":"Managed"}}'
+    oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"rolloutStrategy":"Recreate"}}'
+    oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"storage":{"pvc": {"claim": "image-registry-storage-rwo"}}}}'
+}
+
 function waitForInstallCompletion() {
     if [[ -z "$INSTALL_DIR" ]]; then
         echo Must define INSTALL_DIR
@@ -205,12 +212,11 @@ function waitForInstallCompletion() {
     fi
 
     ./openshift-install wait-for bootstrap-complete --dir=$INSTALL_DIR
-    govc vm.destroy bootstrap
+    govc vm.destroy $INFRA_NAME-bootstrap
 
     oc wait --for=condition=Available co/image-registry
-    oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"managementState":"Managed"}}'
-    oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"storage":{"emptyDir":{}}}}'
-    oc patch scheduler.operator.openshift.io cluster --type merge --patch '{"spec":{"mastersSchedulable":false}}'
+    setupRegistry
+
     ./openshift-install wait-for install-complete --dir=$INSTALL_DIR
 }
 
