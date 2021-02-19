@@ -1,0 +1,12 @@
+
+[Unit]
+Description=haproxy-updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/home/core
+ExecStart=/home/core/haproxy-updater.sh
+
+[Install]
+WantedBy=multi-user.target

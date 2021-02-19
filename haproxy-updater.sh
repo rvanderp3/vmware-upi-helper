@@ -1,3 +1,5 @@
+#!/bin/sh
+
 function buildBackend() {
     NAME=$1
     PORT=$2

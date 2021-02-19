@@ -2,6 +2,7 @@
 BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
 #BASE_VM=rhcos-4.6.8-x86_64-vmware.x86_64
 RESOURCE_POOL=default
+BOOTSTRAP_IP=192.168.122.200
 CPU_CORES=2
 DATASTORE=vanderdisk
 VM_NAME=test-0
@@ -12,10 +13,6 @@ VM_NETMASK=255.255.255.0
 MEMORY_MB=8192
 DISK_SIZE=40G
 ROLE=master
-
-API_ENDPOINTS=()
-MCO_ENDPOINTS=()
-INGRESS_ENDPOINTS=()
 
 function createAndConfigureVM() {
     govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
@@ -28,16 +25,25 @@ function createAndConfigureVM() {
 }
 
 function setupInfraNode () {
+    echo $BOOTSTRAP_IP > BOOTSTRAP_IP
     scp haproxy.service core@$INFRA_IP:.
     scp bootstrap-serv.service core@$INFRA_IP:.
     scp bootstrap-serv.sh core@$INFRA_IP:.
+    scp bootstrap-serv.service core@$INFRA_IP:.
+    scp haproxy-updater.sh core@$INFRA_IP:.
+    scp haproxy-updater.service core@$INFRA_IP:.    
+    scp BOOTSTRAP_IP core@$INFRA_IP:.
+
+    ssh core@$INFRA_IP sudo chmod 755 haproxy-updater.sh
     ssh core@$INFRA_IP sudo chmod 755 bootstrap-serv.sh
     ssh core@$INFRA_IP sudo mv *.service /etc/systemd/system
     ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
+    ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
     ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
     ssh core@$INFRA_IP sudo restorecon -r /etc/systemd/system
     scp $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
     ssh core@$INFRA_IP sudo systemctl start bootstrap-serv
+    ssh core@$INFRA_IP sudo systemctl start haproxy-updater
 }
 
 function prepareInstallation() {
@@ -92,7 +98,7 @@ function startInfraNode() {
 function startBootstrap() {
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign
     
-    VM_IP=192.168.122.200
+    VM_IP=BOOTSTRAP_IP
     VM_NAME=$INFRA_NAME-bootstrap
     CPU_CORES=2
     MEMORY_MB=8192
@@ -124,7 +130,6 @@ function startMasters() {
         INGRESS_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:443 check ")
         let MASTER_INDEX++
     done
-#    updateHaproxyBackends
 }
 
 function startWorkers() {
@@ -137,13 +142,12 @@ function startWorkers() {
         MEMORY_MB=16384
         ROLE=worker
         DISK_SIZE=120G
-	DATASTORE=vanderdisk
+	    DATASTORE=vanderdisk
         createAndConfigureVM
         WORKER_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         INGRESS_ENDPOINTS+=( "server $VM_NAME $WORKER_IP:443 check ")
         let WORKER_INDEX++
     done
-#    updateHaproxyBackends
 }
 
 
