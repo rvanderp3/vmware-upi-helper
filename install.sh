@@ -33,29 +33,31 @@ function createAndConfigureVM() {
 function setupInfraNode () {    
     envsubst < cluster-infra-dns.conf > $INSTALL_DIR/cluster-infra-dns.conf
     
-    scp haproxy.service core@$INFRA_IP:.
-    scp bootstrap-serv.service core@$INFRA_IP:.
-    scp bootstrap-serv.sh core@$INFRA_IP:.
-    scp bootstrap-serv.service core@$INFRA_IP:.
-    scp haproxy-updater.sh core@$INFRA_IP:.
-    scp haproxy-updater.service core@$INFRA_IP:.    
+    scp haproxy.service core@$INFRA_VM_IP:.
+    scp bootstrap-serv.service core@$INFRA_VM_IP:.
+    scp bootstrap-serv.sh core@$INFRA_VM_IP:.
+    scp bootstrap-serv.service core@$INFRA_VM_IP:.
+    scp haproxy-updater.sh core@$INFRA_VM_IP:.
+    scp haproxy.tmp core@$INFRA_VM_IP:.
+    scp haproxy-updater.service core@$INFRA_VM_IP:.   
+    scp $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:. 
     scp  $INSTALL_DIR/cluster-infra-dns.conf core@$INFRA_IP:.    
 
-    ssh core@$INFRA_IP sudo chmod 755 haproxy-updater.sh
-    ssh core@$INFRA_IP sudo chmod 755 bootstrap-serv.sh
-    ssh core@$INFRA_IP sudo mv *.service /etc/systemd/system
-    ssh core@$INFRA_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
-    ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
-    ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
-    ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
-    ssh core@$INFRA_IP sudo restorecon -r /etc/systemd/system
-    ssh core@$INFRA_IP sudo restorecon -r /etc/dnsmasq.d
-    scp $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
-    ssh core@$INFRA_IP sudo systemctl start bootstrap-serv
-    ssh core@$INFRA_IP sudo systemctl enable haproxy-updater
-    ssh core@$INFRA_IP sudo systemctl start haproxy-updater
-    ssh core@$INFRA_IP sudo systemctl enable dnsmasq
-    ssh core@$INFRA_IP sudo systemctl start dnsmasq
+    ssh core@$INFRA_VM_IP sudo chmod 755 haproxy-updater.sh
+    ssh core@$INFRA_VM_IP sudo chmod 755 bootstrap-serv.sh
+    ssh core@$INFRA_VM_IP sudo mv *.service /etc/systemd/system
+    ssh core@$INFRA_VM_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
+    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
+    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
+    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
+    ssh core@$INFRA_VM_IP sudo restorecon -r /etc/systemd/system
+    ssh core@$INFRA_VM_IP sudo restorecon -r /etc/dnsmasq.d
+    scp $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:.    
+    ssh core@$INFRA_VM_IP sudo systemctl start bootstrap-serv
+    ssh core@$INFRA_VM_IP sudo systemctl enable haproxy-updater
+    ssh core@$INFRA_VM_IP sudo systemctl start haproxy-updater
+    ssh core@$INFRA_VM_IP sudo systemctl enable dnsmasq
+    ssh core@$INFRA_VM_IP sudo systemctl start dnsmasq
 }
 
 function getInstallConfigParam() {
@@ -125,7 +127,7 @@ function startBootstrap() {
     VM_NAME=$INFRA_NAME-bootstrap 
     createAndConfigureVM $VM_NAME bootstrap 2 8192 $DATASTORE $RESOURCE_POOL 40G "dhcp nameserver=$INFRA_VM_IP"
     BOOTSTRAP_IP=
-    while [ ! -z $BOOTSTRAP_IP ]; do
+    while [ -z $BOOTSTRAP_IP ]; do
         echo Waiting for bootstrap node to get an IP address
         BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)    
         if [ ! -z $BOOTSTRAP_IP ]; then
