@@ -1,5 +1,6 @@
 
-BASE_VM=node-4.6.8
+BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
+#BASE_VM=rhcos-4.6.8-x86_64-vmware.x86_64
 RESOURCE_POOL=default
 CPU_CORES=2
 DATASTORE=vanderdisk
@@ -17,7 +18,7 @@ MCO_ENDPOINTS=()
 INGRESS_ENDPOINTS=()
 
 function createAndConfigureVM() {
-    govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $GOVC_DATASTORE $VM_NAME
+    govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     govc vm.disk.change -vm $VM_NAME -size=$DISK_SIZE
     govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE \
     -e guestinfo.ignition.config.data.encoding=base64 \
@@ -37,28 +38,6 @@ function setupInfraNode () {
     ssh core@$INFRA_IP sudo restorecon -r /etc/systemd/system
     scp $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
     ssh core@$INFRA_IP sudo systemctl start bootstrap-serv
-}
-
-function updateHaproxyBackends() {
-    # TO-DO: broken, needs to be finished
-    # cat haproxy.cfg > update.haproxy.cfg
-    # echo "backend api-server \
-    #     option  httpchk GET /readyz HTTP/1.0
-    #     option  log-health-checks
-    #     balance roundrobin" >> update.haproxy.cfg
-    # printf '%s\n' "${API_ENDPOINTS[@]}" >> update.haproxy.cfg
-
-    # echo "backend machine-config-server \
-    #     balance roundrobin" >> update.haproxy.cfg
-    # printf '%s\n' "${MCO_ENDPOINTS[@]}" >> update.haproxy.cfg
-
-    # echo "backend router-https \
-    #     balance roundrobin" >> update.haproxy.cfg
-    # printf '%s\n' "${INGRESS_ENDPOINTS[@]}" >> update.haproxy.cfg
-
-    # scp update.haproxy.cfg core@$INFRA_IP:.
-    # ssh core@$INFRA_IP sudo mv  update.haproxy.cfg /etc/haproxy/haproxy.cfg
-    # ssh core@$INFRA_IP sudo systemctl restart haproxy
 }
 
 function prepareInstallation() {
@@ -85,6 +64,7 @@ function prepareInstallation() {
     export GOVC_PASSWORD=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.password')
     export GOVC_URL=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.vCenter')
     export KUBECONFIG=$INSTALL_DIR/auth/kubeconfig
+    DATASTORE=$GOVC_DATASTORE
 
     ./openshift-install create manifests --dir=$INSTALL_DIR
 
@@ -102,6 +82,7 @@ function startInfraNode() {
     CPU_CORES=2
     MEMORY_MB=8192
     ROLE=infra
+    DISK_SIZE=20G
     createAndConfigureVM
     sleep 60
     export INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
@@ -132,10 +113,10 @@ function startMasters() {
     do    
         VM_IP=192.168.122.21$MASTER_INDEX
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
-        CPU_CORES=4
-        MEMORY_MB=16384
+        CPU_CORES=8
+        MEMORY_MB=24000
         ROLE=master
-        DISK_SIZE=80G
+        DISK_SIZE=120G
         createAndConfigureVM
         MASTER_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         API_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:6443 check ")
@@ -143,7 +124,7 @@ function startMasters() {
         INGRESS_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:443 check ")
         let MASTER_INDEX++
     done
-    updateHaproxyBackends
+#    updateHaproxyBackends
 }
 
 function startWorkers() {
@@ -152,16 +133,17 @@ function startWorkers() {
     do    
         VM_IP=192.168.122.22$WORKER_INDEX
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
-        CPU_CORES=2
-        MEMORY_MB=8192
+        CPU_CORES=4
+        MEMORY_MB=16384
         ROLE=worker
-        DISK_SIZE=40G
+        DISK_SIZE=120G
+	DATASTORE=vanderdisk
         createAndConfigureVM
         WORKER_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         INGRESS_ENDPOINTS+=( "server $VM_NAME $WORKER_IP:443 check ")
         let WORKER_INDEX++
     done
-    updateHaproxyBackends
+#    updateHaproxyBackends
 }
 
 
@@ -174,6 +156,10 @@ function bootstrapNewCluster() {
     startBootstrap    
 
     startMasters
+    
+    startWorkers
+
+    enableSingleMaster
 }
 
 
