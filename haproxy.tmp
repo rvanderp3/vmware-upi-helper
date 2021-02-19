@@ -26,22 +26,3 @@ frontend router-http
 frontend router-https
     bind *:443
     default_backend router-https
-
-backend api-server
-    option  httpchk GET /readyz HTTP/1.0
-    option  log-health-checks
-    balance roundrobin
-    $API_ENDPOINTS
-
-backend machine-config-server
-    balance roundrobin
-    
-backend router-http
-    balance source
-    mode tcp
-    
-backend router-https
-    balance source
-    mode tcp
-    
-

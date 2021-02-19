@@ -18,6 +18,7 @@ sudo mkdir -p /etc/haproxy
 # haproxy/dnsmasq reconcilation loop
 while [ 1 ]; do
 
+if [ -f BOOTSTRAP_IP ]; then
 rm temp_cfg
 
 EMPTY_CONTROL_PLANE=0
@@ -65,6 +66,9 @@ if [ $APPLY -eq 1 ]; then
     echo Restarting haproxy
     sudo systemctl restart haproxy
     sudo systemctl status haproxy
+fi
+else
+echo "Waiting for bootstrap node to communicate its IP address"
 fi
 sleep 10
 

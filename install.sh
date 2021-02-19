@@ -1,49 +1,74 @@
 
 BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
-#BASE_VM=rhcos-4.6.8-x86_64-vmware.x86_64
 RESOURCE_POOL=default
-BOOTSTRAP_IP=192.168.122.200
-CPU_CORES=2
 DATASTORE=vanderdisk
-VM_NAME=test-0
-VM_NAMESERVER=192.168.1.215
-VM_GATEWAY=192.168.122.1
-VM_IP=192.168.122.233
-VM_NETMASK=255.255.255.0
-MEMORY_MB=8192
-DISK_SIZE=40G
-ROLE=master
+INFRA_VM_NAMESERVER=192.168.1.215
+INFRA_VM_GATEWAY=192.168.122.1
+export INFRA_VM_IP=192.168.122.240
+INFRA_VM_NETMASK=255.255.255.0
 
+# Creates a Virtual machine by accepting the parameters below:
+# VM Name
+# Role - Maps to the ignition file in $INSTALL_DIR
+# CPU Cores
+# Memory in MB
+# Datastore
+# Resource pool
+# Disk size in GB
+# Network kargs - $VM_IP::$VM_GATEWAY:$VM_NETMASK:$VM_NAME::none:$VM_NAMESERVER
+#
+# All args are required
 function createAndConfigureVM() {
+    VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;RESOURCE_POOL=$6;DISK_SIZE=$7;NETWORK=$8
     govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     govc vm.disk.change -vm $VM_NAME -size=$DISK_SIZE
     govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE \
+    -e guestinfo.hostname=$VM_NAME \
     -e guestinfo.ignition.config.data.encoding=base64 \
-    -e guestinfo.afterburn.initrd.network-kargs="ip=$VM_IP::$VM_GATEWAY:$VM_NETMASK:$VM_NAME::none:$VM_NAMESERVER" \
+    -e guestinfo.afterburn.initrd.network-kargs="ip=$NETWORK" \
     -e guestinfo.ignition.config.data="$(cat $INSTALL_DIR/$ROLE.ign | base64 -w0)"    
     govc vm.power -on=true $VM_NAME
 }
 
-function setupInfraNode () {
-    echo $BOOTSTRAP_IP > BOOTSTRAP_IP
+function setupInfraNode () {    
+    envsubst < cluster-infra-dns.conf > $INSTALL_DIR/cluster-infra-dns.conf
+    
     scp haproxy.service core@$INFRA_IP:.
     scp bootstrap-serv.service core@$INFRA_IP:.
     scp bootstrap-serv.sh core@$INFRA_IP:.
     scp bootstrap-serv.service core@$INFRA_IP:.
     scp haproxy-updater.sh core@$INFRA_IP:.
     scp haproxy-updater.service core@$INFRA_IP:.    
-    scp BOOTSTRAP_IP core@$INFRA_IP:.
+    scp  $INSTALL_DIR/cluster-infra-dns.conf core@$INFRA_IP:.    
 
     ssh core@$INFRA_IP sudo chmod 755 haproxy-updater.sh
     ssh core@$INFRA_IP sudo chmod 755 bootstrap-serv.sh
     ssh core@$INFRA_IP sudo mv *.service /etc/systemd/system
+    ssh core@$INFRA_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
     ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
     ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
     ssh core@$INFRA_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
     ssh core@$INFRA_IP sudo restorecon -r /etc/systemd/system
+    ssh core@$INFRA_IP sudo restorecon -r /etc/dnsmasq.d
     scp $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
     ssh core@$INFRA_IP sudo systemctl start bootstrap-serv
+    ssh core@$INFRA_IP sudo systemctl enable haproxy-updater
     ssh core@$INFRA_IP sudo systemctl start haproxy-updater
+    ssh core@$INFRA_IP sudo systemctl enable dnsmasq
+    ssh core@$INFRA_IP sudo systemctl start dnsmasq
+}
+
+function getInstallConfigParam() {
+    QUERY=$1
+    DEFAULT=$2    
+    VALUE=$(cat $INSTALL_DIR/install-config.yaml | yq -r $QUERY)
+    if [ "null" != "$VALUE" ]; then
+        echo $VALUE
+        return
+    fi
+    if [ ! -z "$DEFAULT" ]; then
+        echo $DEFAULT
+    fi    
 }
 
 function prepareInstallation() {
@@ -60,19 +85,20 @@ function prepareInstallation() {
     mkdir $INSTALL_DIR
     cp install-config.yaml $INSTALL_DIR/
 
-    export CONTROL_PLANE_NODES=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.controlPlane.replicas')
-    export WORKER_NODES=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.compute[0].replicas')    
-    export SSH_PUBLIC_KEY=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.sshKey')    
-    export GOVC_DATACENTER=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.datacenter')
-    export GOVC_DATASTORE=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.defaultDatastore')
+    export SSH_PUBLIC_KEY="$(getInstallConfigParam .sshKey)"
+    export GOVC_DATACENTER="$(getInstallConfigParam  .platform.vsphere.datacenter)"
+    export GOVC_DATASTORE="$(getInstallConfigParam .platform.vsphere.defaultDatastore)"
     export GOVC_INSECURE=1
-    export GOVC_USERNAME=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.username')
-    export GOVC_PASSWORD=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.password')
-    export GOVC_URL=$(cat $INSTALL_DIR/install-config.yaml | yq -r '.platform.vsphere.vCenter')
+    export GOVC_USERNAME="$(getInstallConfigParam .platform.vsphere.username)"
+    export GOVC_PASSWORD="$(getInstallConfigParam .platform.vsphere.password)"
+    export GOVC_URL="$(getInstallConfigParam .platform.vsphere.vCenter)"
     export KUBECONFIG=$INSTALL_DIR/auth/kubeconfig
+    export CLUSTER_NAME="$(getInstallConfigParam .metadata.name)"
+    export BASE_DOMAIN="$(getInstallConfigParam .baseDomain)"
     DATASTORE=$GOVC_DATASTORE
 
     ./openshift-install create manifests --dir=$INSTALL_DIR
+    rm -f $INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-*.yaml $INSTALL_DIR/openshift/99_openshift-cluster-api_worker-machineset-*.yaml
 
     export INFRA_NAME=$(cat $INSTALL_DIR/manifests/cluster-infrastructure-02-config.yml | yq -r '.status.infrastructureName')
     rm ./$INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-0.yaml
@@ -82,70 +108,59 @@ function prepareInstallation() {
     envsubst < infra.ign > $INSTALL_DIR/infra.ign
 }
 
-function startInfraNode() {
-    VM_IP=192.168.122.240
-    VM_NAME=$INFRA_NAME-infra
-    CPU_CORES=2
-    MEMORY_MB=8192
-    ROLE=infra
-    DISK_SIZE=20G
-    createAndConfigureVM
+function startInfraNode() {    
+    createAndConfigureVM $INFRA_NAME-infra infra 2 8192 $DATASTORE $RESOURCE_POOL 20G "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
+
     sleep 60
-    export INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
+    INFRA_IP=
+    while [ -z $INFRA_IP ]; do
+        echo Waiting for infra node to get an IP address
+        INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
+    done
     setupInfraNode
 }
 
 function startBootstrap() {
-    envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign
-    
-    VM_IP=BOOTSTRAP_IP
-    VM_NAME=$INFRA_NAME-bootstrap
-    CPU_CORES=2
-    MEMORY_MB=8192
-    ROLE=bootstrap
-    DISK_SIZE=20G
-    createAndConfigureVM
-
-    BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
-
-    API_ENDPOINTS+=( "server $VM_NAME $BOOTSTRAP_IP:6443 check ")
-    MCO_ENDPOINTS+=( "server $VM_NAME $BOOTSTRAP_IP:22623 check ")
-    updateHaproxyBackends
+    envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
+    VM_NAME=$INFRA_NAME-bootstrap 
+    createAndConfigureVM $VM_NAME bootstrap 2 8192 $DATASTORE $RESOURCE_POOL 40G "dhcp nameserver=$INFRA_VM_IP"
+    BOOTSTRAP_IP=
+    while [ ! -z $BOOTSTRAP_IP ]; do
+        echo Waiting for bootstrap node to get an IP address
+        BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)    
+        if [ ! -z $BOOTSTRAP_IP ]; then
+            echo $BOOTSTRAP_IP > BOOTSTRAP_IP
+            scp BOOTSTRAP_IP core@$INFRA_IP:.
+        fi
+    done
 }
 
 function startMasters() {
     MASTER_INDEX=0
+    CPU_CORES=$(getInstallConfigParam .controlPlane.platform.vsphere.cpus 4)
+    MEMORY_MB=$(getInstallConfigParam .controlPlane.platform.vsphere.memoryMB 16384)
+    DISK_SIZE=$(getInstallConfigParam .controlPlane.platform.vsphere.osDisk.diskSizeGB 120)
+    CONTROL_PLANE_NODES=$(getInstallConfigParam .controlPlane.replicas 3)
     while [ $MASTER_INDEX -lt $CONTROL_PLANE_NODES ]
     do    
-        VM_IP=192.168.122.21$MASTER_INDEX
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
-        CPU_CORES=8
-        MEMORY_MB=24000
         ROLE=master
-        DISK_SIZE=120G
-        createAndConfigureVM
-        MASTER_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
-        API_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:6443 check ")
-        MCO_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:22623 check ")
-        INGRESS_ENDPOINTS+=( "server $VM_NAME $MASTER_IP:443 check ")
-        let MASTER_INDEX++
+        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
     done
 }
 
 function startWorkers() {
     WORKER_INDEX=0
+    CPU_CORES=$(getInstallConfigParam .compute[0].platform.vsphere.cpus 2)
+    MEMORY_MB=$(getInstallConfigParam .compute[0].platform.vsphere.memoryMB 8192)
+    DISK_SIZE=$(getInstallConfigParam .compute[0].platform.vsphere.osDisk.diskSizeGB 120)
+    WORKER_NODES=$(getInstallConfigParam .compute[0].replicas 2)
+
     while [ $WORKER_INDEX -lt $WORKER_NODES ]
     do    
-        VM_IP=192.168.122.22$WORKER_INDEX
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
-        CPU_CORES=4
-        MEMORY_MB=16384
         ROLE=worker
-        DISK_SIZE=120G
-	    DATASTORE=vanderdisk
-        createAndConfigureVM
-        WORKER_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
-        INGRESS_ENDPOINTS+=( "server $VM_NAME $WORKER_IP:443 check ")
+        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
         let WORKER_INDEX++
     done
 }
@@ -154,20 +169,12 @@ function startWorkers() {
 function bootstrapNewCluster() {
     # consume install-config.yaml and set things up
     prepareInstallation
-
     startInfraNode
-
     startBootstrap    
-
-    startMasters
-    
+    startMasters    
     startWorkers
-
     enableSingleMaster
 }
-
-
-
 
 function enableSingleMaster() {
     oc --type=merge patch etcd cluster -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableEtcd": true}}}'
