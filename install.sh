@@ -1,14 +1,13 @@
 
 BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
 RESOURCE_POOL=default
-DATASTORE=vanderdisk
 INFRA_VM_NAMESERVER=192.168.1.215
 INFRA_VM_GATEWAY=192.168.122.1
 export INFRA_VM_IP=192.168.122.240
 INFRA_VM_NETMASK=255.255.255.0
 
 if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
-    SSH_ENFORCE_NODE_HOST_KEY_CHECK="yes"
+    SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK="yes"
 fi
 
 # Creates a Virtual machine by accepting the parameters below:
@@ -25,7 +24,8 @@ fi
 function createAndConfigureVM() {
     VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;RESOURCE_POOL=$6;DISK_SIZE=$7;NETWORK=$8
     govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
-    govc vm.disk.change -vm $VM_NAME -size=$DISK_SIZE
+    echo Provisioning disk with size "$DISK_SIZE"GB
+    govc vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
     govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE \
     -e guestinfo.hostname=$VM_NAME \
     -e guestinfo.ignition.config.data.encoding=base64 \
@@ -121,7 +121,7 @@ function startInfraNode() {
         echo "WARNING!!! SSH host key checking is disabled for the infra node"
     fi
 
-    createAndConfigureVM $INFRA_NAME-infra infra 2 8192 $DATASTORE $RESOURCE_POOL 20G "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
+    createAndConfigureVM $INFRA_NAME-infra infra 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 20G "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
 
     sleep 60
     INFRA_IP=
@@ -135,7 +135,7 @@ function startInfraNode() {
 function startBootstrap() {
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
-    createAndConfigureVM $VM_NAME bootstrap 2 8192 $DATASTORE $RESOURCE_POOL 40G "dhcp nameserver=$INFRA_VM_IP"
+    createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 40G "dhcp nameserver=$INFRA_VM_IP"
     BOOTSTRAP_IP=
     while [ -z $BOOTSTRAP_IP ]; do
         echo Waiting for bootstrap node to get an IP address
@@ -157,7 +157,7 @@ function startMasters() {
     do    
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
         ROLE=master
-        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
         let MASTER_INDEX++
     done
 }
@@ -173,7 +173,7 @@ function startWorkers() {
     do    
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
         ROLE=worker
-        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
         let WORKER_INDEX++
     done
 }
@@ -194,13 +194,19 @@ function bootstrapNewCluster() {
 }
 
 function enableSingleMaster() {
+    oc wait --for=condition=Available co/cloud-credential
     oc --type=merge patch etcd cluster -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableEtcd": true}}}'
-    oc patch authentication.operator.openshift.io/cluster --type=merge -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableOAuthServer": true}}}'
+    oc patch authentication.operator.openshift.io/cluster --type=merge -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableOAuthServer": true}}}'    
 }
 
 function restartWorkers() {
     govc vm.power -off=true $INFRA_NAME-worker*
     govc vm.power -on=true $INFRA_NAME-worker*
+}
+
+function restartMasters() {
+    govc vm.power -off=true $INFRA_NAME-master*
+    govc vm.power -on=true $INFRA_NAME-master*
 }
 
 function approveCSRs() {
