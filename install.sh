@@ -7,6 +7,10 @@ INFRA_VM_GATEWAY=192.168.122.1
 export INFRA_VM_IP=192.168.122.240
 INFRA_VM_NETMASK=255.255.255.0
 
+if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
+    SSH_ENFORCE_NODE_HOST_KEY_CHECK="yes"
+fi
+
 # Creates a Virtual machine by accepting the parameters below:
 # VM Name
 # Role - Maps to the ignition file in $INSTALL_DIR
@@ -33,37 +37,38 @@ function createAndConfigureVM() {
 function setupInfraNode () {    
     envsubst < cluster-infra-dns.conf > $INSTALL_DIR/cluster-infra-dns.conf
     
-    scp haproxy.service core@$INFRA_VM_IP:.
-    scp bootstrap-serv.service core@$INFRA_VM_IP:.
-    scp bootstrap-serv.sh core@$INFRA_VM_IP:.
-    scp bootstrap-serv.service core@$INFRA_VM_IP:.
-    scp haproxy-updater.sh core@$INFRA_VM_IP:.
-    scp haproxy.tmp core@$INFRA_VM_IP:.
-    scp haproxy-updater.service core@$INFRA_VM_IP:.   
-    scp $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:. 
-    scp  $INSTALL_DIR/cluster-infra-dns.conf core@$INFRA_IP:.    
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy.service core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.service core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.sh core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.service core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy-updater.sh core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy.tmp core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy-updater.service core@$INFRA_VM_IP:.   
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:. 
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/cluster-infra-dns.conf core@$INFRA_IP:.    
 
-    ssh core@$INFRA_VM_IP sudo chmod 755 haproxy-updater.sh
-    ssh core@$INFRA_VM_IP sudo chmod 755 bootstrap-serv.sh
-    ssh core@$INFRA_VM_IP sudo mv *.service /etc/systemd/system
-    ssh core@$INFRA_VM_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
-    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
-    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
-    ssh core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
-    ssh core@$INFRA_VM_IP sudo restorecon -r /etc/systemd/system
-    ssh core@$INFRA_VM_IP sudo restorecon -r /etc/dnsmasq.d
-    scp $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:.    
-    ssh core@$INFRA_VM_IP sudo systemctl start bootstrap-serv
-    ssh core@$INFRA_VM_IP sudo systemctl enable haproxy-updater
-    ssh core@$INFRA_VM_IP sudo systemctl start haproxy-updater
-    ssh core@$INFRA_VM_IP sudo systemctl enable dnsmasq
-    ssh core@$INFRA_VM_IP sudo systemctl start dnsmasq
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo chmod 755 haproxy-updater.sh
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo chmod 755 bootstrap-serv.sh
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo mv *.service /etc/systemd/system
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo restorecon -r /etc/systemd/system
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo restorecon -r /etc/dnsmasq.d
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/auth/kubeconfig core@$INFRA_VM_IP:.
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start bootstrap-serv
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl enable haproxy-updater
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start haproxy-updater
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl enable dnsmasq
+    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start dnsmasq
 }
 
 function getInstallConfigParam() {
     QUERY=$1
     DEFAULT=$2    
-    VALUE=$(cat $INSTALL_DIR/install-config.yaml | yq -r $QUERY)
+    VALUE=$(cat $INSTALL_DIR/install-config_preserve.yaml | yq -r $QUERY)
     if [ "null" != "$VALUE" ]; then
         echo $VALUE
         return
@@ -86,6 +91,7 @@ function prepareInstallation() {
 
     mkdir $INSTALL_DIR
     cp install-config.yaml $INSTALL_DIR/
+    cp install-config.yaml $INSTALL_DIR/install-config_preserve.yaml
 
     export SSH_PUBLIC_KEY="$(getInstallConfigParam .sshKey)"
     export GOVC_DATACENTER="$(getInstallConfigParam  .platform.vsphere.datacenter)"
@@ -111,6 +117,10 @@ function prepareInstallation() {
 }
 
 function startInfraNode() {    
+    if [ "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" == "no" ]; then
+        echo "WARNING!!! SSH host key checking is disabled for the infra node"
+    fi
+
     createAndConfigureVM $INFRA_NAME-infra infra 2 8192 $DATASTORE $RESOURCE_POOL 20G "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
 
     sleep 60
@@ -132,7 +142,7 @@ function startBootstrap() {
         BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)    
         if [ ! -z $BOOTSTRAP_IP ]; then
             echo $BOOTSTRAP_IP > BOOTSTRAP_IP
-            scp BOOTSTRAP_IP core@$INFRA_IP:.
+            scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK BOOTSTRAP_IP core@$INFRA_IP:.
         fi
     done
 }
@@ -148,6 +158,7 @@ function startMasters() {
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
         ROLE=master
         createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        let MASTER_INDEX++
     done
 }
 
@@ -174,8 +185,12 @@ function bootstrapNewCluster() {
     startInfraNode
     startBootstrap    
     startMasters    
-    startWorkers
     enableSingleMaster
+    waitForBootstrapCompletion
+    startWorkers
+    approveCSRs &
+    setupRegistry
+    waitForInstallCompletion
 }
 
 function enableSingleMaster() {
@@ -189,7 +204,11 @@ function restartWorkers() {
 }
 
 function approveCSRs() {
-    oc adm certificate approve `oc get csr -o=jsonpath='{.items[*].metadata.name}'`
+    while [ -z $INSTALL_FINISHED ]; do
+        oc adm certificate approve `oc get csr -o=jsonpath='{.items[*].metadata.name}'`
+        sleep 30
+    done
+    unset INSTALL_FINISHED
 }
 
 
@@ -198,25 +217,30 @@ function disableMasterSchedulable() {
 }
 
 function setupRegistry() {
+    oc wait --for=condition=Available co/image-registry
     oc create -f image-registry-rwo-pvc.yaml
     oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"managementState":"Managed"}}'
     oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"rolloutStrategy":"Recreate"}}'
     oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"storage":{"pvc": {"claim": "image-registry-storage-rwo"}}}}'
 }
 
-function waitForInstallCompletion() {
+function waitForBootstrapCompletion() {
     if [[ -z "$INSTALL_DIR" ]]; then
         echo Must define INSTALL_DIR
         return
     fi
-
     ./openshift-install wait-for bootstrap-complete --dir=$INSTALL_DIR
     govc vm.destroy $INFRA_NAME-bootstrap
 
-    oc wait --for=condition=Available co/image-registry
-    setupRegistry
+}
 
+function waitForInstallCompletion() {
+    if [[ -z "$INSTALL_DIR" ]]; then
+        echo Must define INSTALL_DIR
+        return
+    fi 
     ./openshift-install wait-for install-complete --dir=$INSTALL_DIR
+    INSTALL_FINISHED=1
 }
 
 function destroyCluster() {
