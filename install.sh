@@ -205,7 +205,7 @@ function restartWorkers() {
 
 function approveCSRs() {
     while [ -z $INSTALL_FINISHED ]; do
-        oc adm certificate approve `oc get csr -o=jsonpath='{.items[*].metadata.name}'`
+        oc adm certificate approve `oc get csr -o=jsonpath='{.items[*].metadata.name}'` &> /dev/null
         sleep 30
     done
     unset INSTALL_FINISHED
@@ -240,7 +240,7 @@ function waitForInstallCompletion() {
         return
     fi 
     ./openshift-install wait-for install-complete --dir=$INSTALL_DIR
-    INSTALL_FINISHED=1
+    kill $(jobs -p)
 }
 
 function destroyCluster() {

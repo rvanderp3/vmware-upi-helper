@@ -10,7 +10,38 @@ to interact with specific portions of the installation process.
 
 # Networking
 
-Networking is currently static IP based and hard coded.  There is no reason DHCP couldn't be used, however.  
+All created nodes, except for the infra node, use DHCP to obtain their network configuration.  
+
+# Configuring Machines
+
+Machines are configured with specific resources in a manner similar to an IPI installation:
+
+~~~
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform: 
+    vsphere: 
+      cpus: 2
+      coresPerSocket: 1
+      memoryMB: 10000
+      osDisk:
+        diskSizeGB: 60
+  replicas: 2
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform:
+    vsphere: 
+      cpus: 4
+      coresPerSocket: 2
+      memoryMB: 16384
+      osDisk:
+        diskSizeGB: 60
+  replicas: 1
+~~~
 
 # Running an install
 
@@ -32,19 +63,26 @@ startInfraNode
 startBootstrap    
 
 # Creates and starts the master node(s) based on the number of replicas in `install-config.yaml`
-startMasters
+startMasters    
 
-# Creates and starts the worker node(s) based on the number of replicas in `install-config.yaml`
+# Optional, if enabled enables a single master install
+# enableSingleMaster
+
+# Waits for bootstrap completion and tears down the bootstrap node after completion
+waitForBootstrapCompletion
+
+# Creates the worker nodes 
 startWorkers
 
-# If needed, patch installation only require a single master
-enableSingleMaster
+# Starts CSR approval process
+approveCSRs &
 
-# waits for the installation complete.  Will automatically tear down the bootstrap node and enable an emptyDir image registry
+# Setups up the image registry to be backed by a VMware volume
+setupRegistry
+
+# Waits for installation to complete and tears down the CSR approval mechanism
 waitForInstallCompletion
 
-# approves any pending CSRs.  You will need this if you are adding worker nodes
-approveCSRs
 ~~~
 
 
