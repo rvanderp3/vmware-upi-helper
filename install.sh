@@ -1,5 +1,5 @@
 
-BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
+BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
 RESOURCE_POOL=default
 INFRA_VM_NAMESERVER=192.168.1.215
 INFRA_VM_GATEWAY=192.168.122.1
@@ -121,7 +121,7 @@ function startInfraNode() {
         echo "WARNING!!! SSH host key checking is disabled for the infra node"
     fi
 
-    createAndConfigureVM $INFRA_NAME-infra infra 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 20G "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
+    createAndConfigureVM $INFRA_NAME-infra infra 2 2048 $GOVC_DATASTORE $RESOURCE_POOL 20 "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
 
     sleep 60
     INFRA_IP=
@@ -135,7 +135,7 @@ function startInfraNode() {
 function startBootstrap() {
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
-    createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 40G "dhcp nameserver=$INFRA_VM_IP"
+    createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 40 "dhcp nameserver=$INFRA_VM_IP"
     BOOTSTRAP_IP=
     while [ -z $BOOTSTRAP_IP ]; do
         echo Waiting for bootstrap node to get an IP address
