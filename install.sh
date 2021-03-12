@@ -1,4 +1,3 @@
-
 BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
 RESOURCE_POOL=default
 INFRA_VM_NAMESERVER=192.168.1.215
@@ -194,7 +193,15 @@ function bootstrapNewCluster() {
 }
 
 function enableSingleMaster() {
-    oc wait --for=condition=Available co/cloud-credential
+    while [ 1 ]; do
+	    oc wait --for=condition=Available co/cloud-credential
+	    if [ $? -ne 0 ]; then
+		    echo "Waiting for operators ... will try again in 60 seconds"
+		    sleep 60
+	    else
+		    break
+	    fi    
+    done
     oc --type=merge patch etcd cluster -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableEtcd": true}}}'
     oc patch authentication.operator.openshift.io/cluster --type=merge -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableOAuthServer": true}}}'    
 }
@@ -223,6 +230,15 @@ function disableMasterSchedulable() {
 }
 
 function setupRegistry() {
+    while [ 1 ]; do
+	    oc wait --for=condition=Available co/cloud-credential
+	    if [ $? -ne 0 ]; then
+		    echo "Waiting for image registry ... will try again in 60 seconds"
+		    sleep 60
+	    else
+		    break
+	    fi
+    done
     oc wait --for=condition=Available co/image-registry
     oc create -f image-registry-rwo-pvc.yaml
     oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{"spec":{"managementState":"Managed"}}'
