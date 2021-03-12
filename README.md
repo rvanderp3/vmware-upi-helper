@@ -107,6 +107,14 @@ waitForInstallCompletion
 
 ~~~
 
+Optionally, you can also simply run:
+
+~~~
+bootstrapNewCluster
+~~~
+
+This will provision a single master cluster.
+
 # Host key checking for the infra node
 
 As a convenience, the variable `SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK=no` can be defined which disables host-key checking only for the infra node.  This can be
