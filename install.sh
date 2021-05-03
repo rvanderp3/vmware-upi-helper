@@ -1,9 +1,12 @@
 BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
-RESOURCE_POOL=default
 INFRA_VM_NAMESERVER=192.168.1.215
-INFRA_VM_GATEWAY=192.168.122.1
-export INFRA_VM_IP=192.168.122.240
+INFRA_VM_GATEWAY=192.168.2.1
+export INFRA_VM_IP=192.168.2.240
 INFRA_VM_NETMASK=255.255.255.0
+
+if [ -z "$SSH_PUBLIC_KEY" ]; then
+    export SSH_PUBLIC_KEY=$(cat ~/.ssh/id_rsa.pub)
+fi
 
 if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
     SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK="yes"
@@ -21,8 +24,21 @@ fi
 #
 # All args are required
 function createAndConfigureVM() {
-    VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;RESOURCE_POOL=$6;DISK_SIZE=$7;NETWORK=$8
-    govc vm.clone -folder=$INFRA_NAME -on=false -pool=$RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
+    VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;DISK_SIZE=$6;NETWORK=$7
+
+    if [ ! -z "$DRS_CLUSTER_NAME" ]; then
+        RESOURCE_POOL="-cluster $DRS_CLUSTER_NAME"
+    fi
+
+    if [ ! -z "$VM_RESOURCE_POOL" ]; then
+        RESOURCE_POOL="-pool $VM_RESOURCE_POOL"
+    fi
+
+    if [ -z "$RESOURCE_POOL" ]; then
+        echo Using the default resource pool
+    fi
+    echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB $VM_NAME
+    govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     echo Provisioning disk with size "$DISK_SIZE"GB
     govc vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
     govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE \
@@ -33,35 +49,14 @@ function createAndConfigureVM() {
     govc vm.power -on=true $VM_NAME
 }
 
-function setupInfraNode () {    
-    envsubst < cluster-infra-dns.conf > $INSTALL_DIR/cluster-infra-dns.conf
-    
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy.service core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.service core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.sh core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK bootstrap-serv.service core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy-updater.sh core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy.tmp core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK haproxy-updater.service core@$INFRA_VM_IP:.   
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:. 
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/cluster-infra-dns.conf core@$INFRA_IP:.    
-
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo chmod 755 haproxy-updater.sh
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo chmod 755 bootstrap-serv.sh
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo mv *.service /etc/systemd/system
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo mv cluster-infra-dns.conf /etc/dnsmasq.d
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy.service"
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/haproxy-updater.service"
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP "sudo semanage fcontext -a -t systemd_unit_file_t /etc/systemd/system/bootstrap-serv.service"
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo restorecon -r /etc/systemd/system
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo restorecon -r /etc/dnsmasq.d
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_VM_IP:.
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/auth/kubeconfig core@$INFRA_VM_IP:.
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start bootstrap-serv
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl enable haproxy-updater
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start haproxy-updater
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl enable dnsmasq
-    ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_VM_IP sudo systemctl start dnsmasq
+function setupInfraNode () {        
+    rm -rf igntmp 
+    mkdir igntmp
+    envsubst < cluster-infra-dns.conf > igntmp/cluster-infra-dns.conf    
+    envsubst < infra-ignition.yaml > igntmp/infra-ignition.yaml        
+    cp $INSTALL_DIR/auth/kubeconfig ./igntmp
+    podman run -i -v $(pwd):/files:Z --rm quay.io/coreos/butane:release -d /files --pretty  --strict < igntmp/infra-ignition.yaml > $INSTALL_DIR/infra.ign
+    startInfraNode
 }
 
 function getInstallConfigParam() {
@@ -88,9 +83,9 @@ function prepareInstallation() {
         return
     fi
 
-    mkdir $INSTALL_DIR
-    cp install-config.yaml $INSTALL_DIR/
-    cp install-config.yaml $INSTALL_DIR/install-config_preserve.yaml
+    mkdir $INSTALL_DIR    
+    envsubst < install-config.yaml > $INSTALL_DIR/install-config.yaml
+    cp $INSTALL_DIR/install-config.yaml $INSTALL_DIR/install-config_preserve.yaml
 
     export SSH_PUBLIC_KEY="$(getInstallConfigParam .sshKey)"
     export GOVC_DATACENTER="$(getInstallConfigParam  .platform.vsphere.datacenter)"
@@ -101,8 +96,10 @@ function prepareInstallation() {
     export GOVC_URL="$(getInstallConfigParam .platform.vsphere.vCenter)"
     export KUBECONFIG=$INSTALL_DIR/auth/kubeconfig
     export CLUSTER_NAME="$(getInstallConfigParam .metadata.name)"
+    export DRS_CLUSTER_NAME="$(getInstallConfigParam .platform.vsphere.cluster)"
+    export VM_RESOURCE_POOL="$(getInstallConfigParam .platform.vsphere.resourcePool)"
     export BASE_DOMAIN="$(getInstallConfigParam .baseDomain)"
-    DATASTORE=$GOVC_DATASTORE
+    export GOVC_NETWORK="$(getInstallConfigParam .platform.vsphere.network)"
 
     ./openshift-install create manifests --dir=$INSTALL_DIR
     rm -f $INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-*.yaml $INSTALL_DIR/openshift/99_openshift-cluster-api_worker-machineset-*.yaml
@@ -112,7 +109,6 @@ function prepareInstallation() {
 
     govc folder.create /$GOVC_DATACENTER/vm/$INFRA_NAME
     ./openshift-install create ignition-configs --dir=$INSTALL_DIR
-    envsubst < infra.ign > $INSTALL_DIR/infra.ign
 }
 
 function startInfraNode() {    
@@ -120,21 +116,21 @@ function startInfraNode() {
         echo "WARNING!!! SSH host key checking is disabled for the infra node"
     fi
 
-    createAndConfigureVM $INFRA_NAME-infra infra 2 2048 $GOVC_DATASTORE $RESOURCE_POOL 20 "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
+    createAndConfigureVM $INFRA_NAME-infra infra 2 2048 $GOVC_DATASTORE 20 "$INFRA_VM_IP::$INFRA_VM_GATEWAY:$INFRA_VM_NETMASK:$INFRA_NAME-infra::none:$INFRA_VM_NAMESERVER"
 
     sleep 60
     INFRA_IP=
     while [ -z $INFRA_IP ]; do
         echo Waiting for infra node to get an IP address
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
-    done
-    setupInfraNode
+    done    
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
 
 function startBootstrap() {
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
-    createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE $RESOURCE_POOL 40 "dhcp nameserver=$INFRA_VM_IP"
+    createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE 40 "dhcp nameserver=$INFRA_VM_IP"
     BOOTSTRAP_IP=
     while [ -z $BOOTSTRAP_IP ]; do
         echo Waiting for bootstrap node to get an IP address
@@ -156,7 +152,7 @@ function startMasters() {
     do    
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
         ROLE=master
-        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
         let MASTER_INDEX++
     done
 }
@@ -172,7 +168,7 @@ function startWorkers() {
     do    
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
         ROLE=worker
-        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $RESOURCE_POOL $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
         let WORKER_INDEX++
     done
 }
