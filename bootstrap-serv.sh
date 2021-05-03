@@ -1,6 +1,11 @@
 #!/bin/bash
 PORT=9999
 FILE=/home/core/bootstrap.ign
+
+if [ ! -f "$FILE" ]; then
+    echo $FILE not found
+    exit 1
+fi
 MIME_TYPE=$(mimetype "$FILE")
 SIZE_BYTES=$(du -b "$FILE" | cut -f1)
 FILE_NAME=$(basename "$FILE")
