@@ -14,9 +14,6 @@ to interact with specific portions of the installation process.
 # VM template to be used to create machines
 BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
 
-# Resource pool to be used for the install
-RESOURCE_POOL=default
-
 # Upstream DNS server
 INFRA_VM_NAMESERVER=192.168.1.215
 
@@ -28,6 +25,9 @@ export INFRA_VM_IP=192.168.122.240
 
 # Infra node network mask
 INFRA_VM_NETMASK=255.255.255.0
+
+# Installation directory
+INSTALL_DIR=./install-dir
 ~~~
 
 # Networking
@@ -63,6 +63,15 @@ controlPlane:
       osDisk:
         diskSizeGB: 60
   replicas: 1
+platform:
+  vsphere:
+    datacenter: your-dc
+    network: "The Network" 
+    defaultDatastore: your-ds
+    password: your-pw
+    resourcePool: your-resource-pool
+    username: your-username
+    vCenter: vcenter-hostname
 ~~~
 
 # Running an install
@@ -79,7 +88,7 @@ export INSTALL_DIR=the-install-dir
 prepareInstallation
 
 # Installs and creates an infrastructure node for haproxy and the bootstrap server
-startInfraNode
+setupInfraNode
 
 # Creates and starts the bootstrap node
 startBootstrap    
@@ -114,6 +123,16 @@ bootstrapNewCluster
 ~~~
 
 This will provision a single master cluster.
+
+# Public SSH Key
+
+The environment variable `SSH_PUBLIC_KEY` defines the public key to be used in the infra node ignition as well as `install-config.yaml`.   If the `SSH_PUBLIC_KEY` is not defined, the public key in `~/.ssh/id_rsa.pub` is read and `SSH_PUBLIC_KEY` is set to the content of the key.  To include the key in your `install-config.yaml`, include this definition:
+
+~~~
+sshKey: |
+  $SSH_PUBLIC_KEY
+~~~
+
 
 # Host key checking for the infra node
 

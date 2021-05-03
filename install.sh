@@ -1,8 +1,8 @@
-BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
-INFRA_VM_NAMESERVER=192.168.1.215
-INFRA_VM_GATEWAY=192.168.2.1
-export INFRA_VM_IP=192.168.2.240
-INFRA_VM_NETMASK=255.255.255.0
+# BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
+# INFRA_VM_NAMESERVER=192.168.1.215
+# INFRA_VM_GATEWAY=192.168.2.1
+# export INFRA_VM_IP=192.168.2.240
+# INFRA_VM_NETMASK=255.255.255.0
 
 if [ -z "$SSH_PUBLIC_KEY" ]; then
     export SSH_PUBLIC_KEY=$(cat ~/.ssh/id_rsa.pub)
@@ -177,7 +177,7 @@ function startWorkers() {
 function bootstrapNewCluster() {
     # consume install-config.yaml and set things up
     prepareInstallation
-    startInfraNode
+    setupInfraNode
     startBootstrap    
     startMasters    
     enableSingleMaster
