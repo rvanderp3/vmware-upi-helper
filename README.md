@@ -122,7 +122,7 @@ Optionally, you can also simply run:
 bootstrapNewCluster
 ~~~
 
-This will provision a single master cluster.
+Note: By default this will allow a single master cluster to be installed which is an unsupported configuration.  Comment out `enableSingleMaster` to disable this behavior if installing a 3 master cluster.
 
 # Public SSH Key
 
@@ -140,4 +140,25 @@ As a convenience, the variable `SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK=no` can be
 helpful when it is required to spin up new clusters regularly from the same host.  
 
 
+# Installing OKD
 
+fcos does not include `oc`(required by the infra node) and VMware does not seem to report the IP address of the nodes consistently.  The steps in this project will roughly work with an OKD installation, but will require manual intervention in the `setupInfraNode` and `startBootstrap`.
+
+~~~
+setupInfraNode 
+
+# Wait for infra node to start and CTRL+C to exit setupInfraNode. Then scp the bootstrap ignition to the infra node
+INFRA_IP=172.16.y.x
+scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+
+# Copy oc to the infra node - the haproxy configuration service requires this to detect nodes.  Otherwise, once the bootstrap API
+# drops, the API will no longer be reachable.
+scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK path/to/oc core@$INFRA_IP:.
+ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_IP "mv oc /usr/local/bin"
+
+startBootstrap 
+
+# Wait for the bootstrap node to start and CTRL+C to exit startBootstrap. Then scp the bootstrap IP to the infra node
+echo 172.16.y.z > BOOTSTRAP_IP
+scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK BOOTSTRAP_IP core@$INFRA_IP:.
+~~
