@@ -55,6 +55,7 @@ function setupInfraNode () {
     envsubst < cluster-infra-dns.conf > igntmp/cluster-infra-dns.conf    
     envsubst < infra-ignition.yaml > igntmp/infra-ignition.yaml        
     cp $INSTALL_DIR/auth/kubeconfig ./igntmp
+    cp $INSTALL_DIR/bootstrap.ign ./igntmp
     podman run -i -v $(pwd):/files:Z --rm quay.io/coreos/butane:release -d /files --pretty  --strict < igntmp/infra-ignition.yaml > $INSTALL_DIR/infra.ign
     startInfraNode
 }
@@ -127,7 +128,7 @@ function startInfraNode() {
     scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
 
-function startBootstrap() {
+function startBootstrap() {    
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
     createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE 40 "dhcp nameserver=$INFRA_VM_IP"
@@ -152,7 +153,7 @@ function startMasters() {
     do    
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
         ROLE=master
-        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" &
         let MASTER_INDEX++
     done
 }
@@ -168,7 +169,7 @@ function startWorkers() {
     do    
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
         ROLE=worker
-        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP"
+        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" &
         let WORKER_INDEX++
     done
 }
