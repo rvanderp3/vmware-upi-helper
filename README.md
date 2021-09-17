@@ -1,4 +1,4 @@
-Setting up a UPI installation can be a somewhat tedious effort.  This intent of this project is to share some scripting developed to 
+Setting up a UPI installation can be a somewhat tedious effort.  This intent of this project is to share some scripting developed to
 make some of this easier.  It is recognized that there is terraform which meets a similar need.  The reason this was done was the desire
 to interact with specific portions of the installation process.
 
@@ -13,6 +13,12 @@ to interact with specific portions of the installation process.
 ~~~
 # VM template to be used to create machines
 BASE_VM=rhcos-4.7.0-fc.4-x86_64-vmware.x86_64
+
+# Windows VM template to be used to create machines
+WINDOWS_TEMPLATE=windows-golden-images/windows-server-2004-template
+
+# Quantity of Windows virtual machines to clone
+WIN_WORKER_NODES=2
 
 # Upstream DNS server
 INFRA_VM_NAMESERVER=192.168.1.215
@@ -32,7 +38,7 @@ INSTALL_DIR=./install-dir
 
 # Networking
 
-All created nodes, except for the infra node, use DHCP to obtain their network configuration.  
+All created nodes, except for the infra node, use DHCP to obtain their network configuration.
 
 # Configuring Machines
 
@@ -43,8 +49,8 @@ compute:
 - architecture: amd64
   hyperthreading: Enabled
   name: worker
-  platform: 
-    vsphere: 
+  platform:
+    vsphere:
       cpus: 2
       coresPerSocket: 1
       memoryMB: 10000
@@ -56,7 +62,7 @@ controlPlane:
   hyperthreading: Enabled
   name: master
   platform:
-    vsphere: 
+    vsphere:
       cpus: 4
       coresPerSocket: 2
       memoryMB: 16384
@@ -66,7 +72,7 @@ controlPlane:
 platform:
   vsphere:
     datacenter: your-dc
-    network: "The Network" 
+    network: "The Network"
     defaultDatastore: your-ds
     password: your-pw
     resourcePool: your-resource-pool
@@ -91,10 +97,10 @@ prepareInstallation
 setupInfraNode
 
 # Creates and starts the bootstrap node
-startBootstrap    
+startBootstrap
 
 # Creates and starts the master node(s) based on the number of replicas in `install-config.yaml`
-startMasters    
+startMasters
 
 # Optional, if enabled enables a single master install
 # enableSingleMaster
@@ -102,7 +108,7 @@ startMasters
 # Waits for bootstrap completion and tears down the bootstrap node after completion
 waitForBootstrapCompletion
 
-# Creates the worker nodes 
+# Creates the worker nodes
 startWorkers
 
 # Starts CSR approval process
@@ -137,7 +143,7 @@ sshKey: |
 # Host key checking for the infra node
 
 As a convenience, the variable `SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK=no` can be defined which disables host-key checking only for the infra node.  This can be
-helpful when it is required to spin up new clusters regularly from the same host.  
+helpful when it is required to spin up new clusters regularly from the same host.
 
 
 # Installing OKD
@@ -145,7 +151,7 @@ helpful when it is required to spin up new clusters regularly from the same host
 fcos does not include `oc`(required by the infra node) and VMware does not seem to report the IP address of the nodes consistently.  The steps in this project will roughly work with an OKD installation, but will require manual intervention in the `setupInfraNode` and `startBootstrap`.
 
 ~~~
-setupInfraNode 
+setupInfraNode
 
 # Wait for infra node to start and CTRL+C to exit setupInfraNode. Then scp the bootstrap ignition to the infra node
 INFRA_IP=172.16.y.x
@@ -156,7 +162,7 @@ scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR
 scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK path/to/oc core@$INFRA_IP:.
 ssh -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK core@$INFRA_IP "mv oc /usr/local/bin"
 
-startBootstrap 
+startBootstrap
 
 # Wait for the bootstrap node to start and CTRL+C to exit startBootstrap. Then scp the bootstrap IP to the infra node
 echo 172.16.y.z > BOOTSTRAP_IP
