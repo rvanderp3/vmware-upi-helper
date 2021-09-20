@@ -1,4 +1,6 @@
 # BASE_VM=rhcos-4.7.0-x86_64-vmware.x86_64
+# WINDOWS_TEMPLATE=windows-golden-images/windows-server-2004-template
+# WIN_WORKER_NODES=2
 # INFRA_VM_NAMESERVER=192.168.1.215
 # INFRA_VM_GATEWAY=192.168.2.1
 # export INFRA_VM_IP=192.168.2.240
@@ -24,7 +26,7 @@ fi
 #
 # All args are required
 function createAndConfigureVM() {
-    VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;DISK_SIZE=$6;NETWORK=$7
+    VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;DISK_SIZE=$6;NETWORK=$7;TEMPLATE=$8
 
     if [ ! -z "$DRS_CLUSTER_NAME" ]; then
         RESOURCE_POOL="-cluster $DRS_CLUSTER_NAME"
@@ -37,23 +39,26 @@ function createAndConfigureVM() {
     if [ -z "$RESOURCE_POOL" ]; then
         echo Using the default resource pool
     fi
-    echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB $VM_NAME
-    govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_VM -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
+    echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $TEMPLATE -c $CPU_CORES -m $MEMORY_MB $VM_NAME
+    govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $TEMPLATE -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     echo Provisioning disk with size "$DISK_SIZE"GB
     govc vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
-    govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE \
-    -e guestinfo.hostname=$VM_NAME \
-    -e guestinfo.ignition.config.data.encoding=base64 \
-    -e guestinfo.afterburn.initrd.network-kargs="ip=$NETWORK" \
-    -e guestinfo.ignition.config.data="$(cat $INSTALL_DIR/$ROLE.ign | base64 -w0)"    
+    govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE
+
+    if [ "$ROLE" != "winworker" ]; then
+        govc vm.change -vm $VM_NAME -e guestinfo.hostname=$VM_NAME \
+        -e guestinfo.ignition.config.data.encoding=base64 \
+        -e guestinfo.afterburn.initrd.network-kargs="ip=$NETWORK" \
+        -e guestinfo.ignition.config.data="$(cat $INSTALL_DIR/$ROLE.ign | base64 -w0)"
+    fi
     govc vm.power -on=true $VM_NAME
 }
 
-function setupInfraNode () {        
-    rm -rf igntmp 
+function setupInfraNode () {
+    rm -rf igntmp
     mkdir igntmp
-    envsubst < cluster-infra-dns.conf > igntmp/cluster-infra-dns.conf    
-    envsubst < infra-ignition.yaml > igntmp/infra-ignition.yaml        
+    envsubst < cluster-infra-dns.conf > igntmp/cluster-infra-dns.conf
+    envsubst < infra-ignition.yaml > igntmp/infra-ignition.yaml
     cp $INSTALL_DIR/auth/kubeconfig ./igntmp
     cp $INSTALL_DIR/bootstrap.ign ./igntmp
     podman run -i -v $(pwd):/files:Z --rm quay.io/coreos/butane:release -d /files --pretty  --strict < igntmp/infra-ignition.yaml > $INSTALL_DIR/infra.ign
@@ -62,7 +67,7 @@ function setupInfraNode () {
 
 function getInstallConfigParam() {
     QUERY=$1
-    DEFAULT=$2    
+    DEFAULT=$2
     VALUE=$(cat $INSTALL_DIR/install-config_preserve.yaml | yq -r $QUERY)
     if [ "null" != "$VALUE" ]; then
         echo $VALUE
@@ -70,21 +75,21 @@ function getInstallConfigParam() {
     fi
     if [ ! -z "$DEFAULT" ]; then
         echo $DEFAULT
-    fi    
+    fi
 }
 
 function prepareInstallation() {
     if [[ -z "$INSTALL_DIR" ]]; then
         echo Must define INSTALL_DIR
         return
-    fi    
+    fi
 
     if [[ -d "$INSTALL_DIR" ]]; then
         echo Install dir $INSTALL_DIR already exists.  You must delete it before continuing.
         return
     fi
 
-    mkdir $INSTALL_DIR    
+    mkdir $INSTALL_DIR
     envsubst < install-config.yaml > $INSTALL_DIR/install-config.yaml
     cp $INSTALL_DIR/install-config.yaml $INSTALL_DIR/install-config_preserve.yaml
 
@@ -112,7 +117,7 @@ function prepareInstallation() {
     ./openshift-install create ignition-configs --dir=$INSTALL_DIR
 }
 
-function startInfraNode() {    
+function startInfraNode() {
     if [ "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" == "no" ]; then
         echo "WARNING!!! SSH host key checking is disabled for the infra node"
     fi
@@ -124,18 +129,18 @@ function startInfraNode() {
     while [ -z $INFRA_IP ]; do
         echo Waiting for infra node to get an IP address
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
-    done    
+    done
     scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
 
-function startBootstrap() {    
-    envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
-    VM_NAME=$INFRA_NAME-bootstrap 
+function startBootstrap() {
+    envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign
+    VM_NAME=$INFRA_NAME-bootstrap
     createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE 40 "dhcp nameserver=$INFRA_VM_IP"
     BOOTSTRAP_IP=
     while [ -z $BOOTSTRAP_IP ]; do
         echo Waiting for bootstrap node to get an IP address
-        BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)    
+        BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         if [ ! -z $BOOTSTRAP_IP ]; then
             echo $BOOTSTRAP_IP > BOOTSTRAP_IP
             scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK BOOTSTRAP_IP core@$INFRA_IP:.
@@ -150,10 +155,10 @@ function startMasters() {
     DISK_SIZE=$(getInstallConfigParam .controlPlane.platform.vsphere.osDisk.diskSizeGB 120)
     CONTROL_PLANE_NODES=$(getInstallConfigParam .controlPlane.replicas 3)
     while [ $MASTER_INDEX -lt $CONTROL_PLANE_NODES ]
-    do    
+    do
         VM_NAME=$INFRA_NAME-master-$MASTER_INDEX
         ROLE=master
-        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" &
+        createAndConfigureVM $VM_NAME master $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" $BASE_VM &
         let MASTER_INDEX++
     done
 }
@@ -166,21 +171,34 @@ function startWorkers() {
     WORKER_NODES=$(getInstallConfigParam .compute[0].replicas 2)
 
     while [ $WORKER_INDEX -lt $WORKER_NODES ]
-    do    
+    do
         VM_NAME=$INFRA_NAME-worker-$WORKER_INDEX
         ROLE=worker
-        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" &
+        createAndConfigureVM $VM_NAME worker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "dhcp nameserver=$INFRA_VM_IP" $BASE_VM &
         let WORKER_INDEX++
     done
 }
 
+function startWindowsWorkers() {
+    WIN_WORKER_INDEX=0
+    CPU_CORES=4
+    MEMORY_MB=16384
+    DISK_SIZE=128
+    while [ $WIN_WORKER_INDEX -lt $WIN_WORKER_NODES ]
+    do
+        VM_NAME=$INFRA_NAME-winworker-$WORKER_INDEX
+        ROLE=worker
+        createAndConfigureVM $VM_NAME winworker $CPU_CORES $MEMORY_MB $GOVC_DATASTORE $DISK_SIZE "" $WINDOWS_TEMPLATE &
+        let WIN_WORKER_INDEX++
+    done
+}
 
 function bootstrapNewCluster() {
     # consume install-config.yaml and set things up
     prepareInstallation
     setupInfraNode
-    startBootstrap    
-    startMasters    
+    startBootstrap
+    startMasters
     enableSingleMaster
     waitForBootstrapCompletion
     startWorkers
@@ -197,10 +215,10 @@ function enableSingleMaster() {
 		    sleep 60
 	    else
 		    break
-	    fi    
+	    fi
     done
     oc --type=merge patch etcd cluster -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableEtcd": true}}}'
-    oc patch authentication.operator.openshift.io/cluster --type=merge -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableOAuthServer": true}}}'    
+    oc patch authentication.operator.openshift.io/cluster --type=merge -p='{"spec":{"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableOAuthServer": true}}}'
 }
 
 function restartWorkers() {
@@ -257,7 +275,7 @@ function waitForInstallCompletion() {
     if [[ -z "$INSTALL_DIR" ]]; then
         echo Must define INSTALL_DIR
         return
-    fi 
+    fi
     ./openshift-install wait-for install-complete --dir=$INSTALL_DIR
     kill $(jobs -p)
 }
