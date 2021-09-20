@@ -1,0 +1,71 @@
+variant: fcos
+version: 1.1.0
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - $SSH_PUBLIC_KEY
+storage:
+  files:
+    - path: /etc/haproxy/haproxy.conf
+      mode: 0644
+      contents: 
+        local: haproxy.conf
+    - path: /home/core/bootstrap-serv.sh
+      mode: 0777
+      contents: 
+        local: bootstrap-serv.sh
+    - path: /etc/dnsmasq.d/cluster-infra-dns.conf
+      mode: 0666
+      contents: 
+        local: igntmp/cluster-infra-dns.conf
+
+    - path: /home/core/kubeconfig
+      mode: 0666
+      contents: 
+        local: igntmp/kubeconfig
+
+systemd:
+  units:
+    - name: haproxy.service
+      enabled: true
+      contents: |        
+        [Unit]
+        Description=haproxy
+        After=network-online.target
+        Wants=network-online.target
+        
+        [Service]
+        Restart=on-failure
+        RestartSec=5s
+        TimeoutStartSec=0
+        ExecStartPre=-/bin/podman kill haproxy
+        ExecStartPre=-/bin/podman rm haproxy
+        ExecStartPre=/bin/podman pull quay.io/openshift/origin-haproxy-router
+        ExecStart=/bin/podman run --name haproxy \
+          --net=host \
+          --privileged \
+          --entrypoint=/usr/sbin/haproxy \
+          -v /etc/haproxy/haproxy.conf:/etc/haproxy/haproxy.conf:Z \
+          quay.io/openshift/origin-haproxy-router -f /etc/haproxy/haproxy.conf
+        ExecStop=/bin/podman rm -f haproxy
+        
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: bootstrap-serv.service
+      enabled: true
+      contents: |          
+        [Unit]
+        Description=Only serves the bootstrap.ign out of /home/core on port 9999
+        After=network-online.target
+        Wants=network-online.target
+        
+        [Service]
+        Restart=on-failure
+        RestartSec=5s
+        TimeoutStartSec=0
+        ExecStart=/bin/sh -c /home/core/bootstrap-serv.sh
+        
+        [Install]
+        WantedBy=multi-user.target

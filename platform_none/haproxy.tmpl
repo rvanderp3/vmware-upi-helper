@@ -1,0 +1,62 @@
+defaults
+  maxconn 20000
+  mode    tcp
+  log     /var/run/haproxy/haproxy-log.sock local0
+  option  dontlognull
+  retries 3
+  timeout http-request 10s
+  timeout queue        1m
+  timeout connect      10s
+  timeout client       86400s
+  timeout server       86400s
+  timeout tunnel       86400s
+
+frontend control_plane_api
+    bind *:6443
+    default_backend control_plane_api_be
+
+frontend control_plane_mcs
+    bind *:22623
+    default_backend control_plane_mcs_be
+
+frontend compute_ingress_http
+    bind *:80
+    default_backend compute_ingress_http_be
+
+frontend compute_ingress_https
+    bind *:443
+    default_backend compute_ingress_https_be
+
+backend control_plane_api_be
+    mode tcp
+    log global
+    balance roundrobin
+    server bootstrap ${SUBNET_PREFIX}.19:6443 check
+    server control_plane_1 ${SUBNET_PREFIX}.10:6443 check
+    server control_plane_2 ${SUBNET_PREFIX}.11:6443 check
+    server control_plane_3 ${SUBNET_PREFIX}.12:6443 check
+
+backend control_plane_mcs_be
+    mode tcp
+    log global
+    balance roundrobin
+    server bootstrap ${SUBNET_PREFIX}.19:22623 check
+    server control_plane_1 ${SUBNET_PREFIX}.10:22623 check
+    server control_plane_2 ${SUBNET_PREFIX}.11:22623 check
+    server control_plane_3 ${SUBNET_PREFIX}.12:22623 check
+
+backend compute_ingress_https_be
+    mode tcp
+    log global
+    balance roundrobin
+    server compute_1 ${SUBNET_PREFIX}.20:443 check
+    server compute_2 ${SUBNET_PREFIX}.21:443 check
+    server compute_3 ${SUBNET_PREFIX}.22:443 check
+
+backend compute_ingress_http_be
+    mode tcp
+    log global
+    balance roundrobin
+    server compute_1 ${SUBNET_PREFIX}.20:80 check
+    server compute_2 ${SUBNET_PREFIX}.21:80 check
+    server compute_3 ${SUBNET_PREFIX}.22:80 check
