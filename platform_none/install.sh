@@ -11,18 +11,6 @@ if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
     SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK="yes"
 fi
 
-# Creates a Virtual machine by accepting the parameters below:
-# VM Name
-# Role - Maps to the ignition file in $INSTALL_DIR
-# CPU Cores
-# Memory in MB
-# Datastore
-# Resource pool
-# Disk size in GB
-# Network kargs - $VM_IP::$VM_GATEWAY:$VM_NETMASK:$VM_NAME::none:$VM_NAMESERVER
-# Template - template to clone
-# All args are required
-
 function createAndConfigureVM() {
     VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;DISK_SIZE=$6;NETWORK=$7;TEMPLATE=$8
 
@@ -91,8 +79,7 @@ function prepareInstallation() {
     if [[ ! -f "./openshift-install" ]]; then
         echo "openshift-install was not found in the working directory"
         return
-    fi
-        
+    fi        
 
     mkdir $INSTALL_DIR    
     envsubst < haproxy.tmpl > haproxy.conf
@@ -102,8 +89,7 @@ function prepareInstallation() {
     export SSH_PUBLIC_KEY="$(getInstallConfigParam .sshKey)"
     export KUBECONFIG=$INSTALL_DIR/auth/kubeconfig
     export CLUSTER_NAME="$(getInstallConfigParam .metadata.name)"
-    export BASE_DOMAIN="$(getInstallConfigParam .baseDomain)"
-    
+    export BASE_DOMAIN="$(getInstallConfigParam .baseDomain)"    
 
     ./openshift-install create manifests --dir=$INSTALL_DIR
     rm -f $INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-*.yaml $INSTALL_DIR/openshift/99_openshift-cluster-api_worker-machineset-*.yaml
@@ -135,19 +121,10 @@ function startInfraNode() {
     scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
 
-function startBootstrap() {    
+function startBootstrap() {        
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
     createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE 40 "$BOOTSTRAP_IP::$SUBNET_GATEWAY:$SUBNET_NETMASK:$VM_NAME::none:$INFRA_VM_IP" $BASE_TEMPLATE
-    BOOTSTRAP_IP=
-    while [ -z $BOOTSTRAP_IP ]; do
-        echo Waiting for bootstrap node to get an IP address
-        BOOTSTRAP_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)    
-        if [ ! -z $BOOTSTRAP_IP ]; then
-            echo $BOOTSTRAP_IP > BOOTSTRAP_IP
-            scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK BOOTSTRAP_IP core@$INFRA_IP:.
-        fi
-    done
 }
 
 function startControlPlaneNodes() {
