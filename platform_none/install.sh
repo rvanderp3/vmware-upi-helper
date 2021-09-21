@@ -7,6 +7,10 @@ if [ -z "$SSH_PUBLIC_KEY" ]; then
     export SSH_PUBLIC_KEY=$(cat ~/.ssh/id_rsa.pub)
 fi
 
+if [ -z "$SSH_PRIVATE_KEYPATH" ]; then
+    export SSH_PRIVATE_KEYPATH=~/.ssh/id_rsa
+fi
+
 if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
     SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK="yes"
 fi
@@ -119,7 +123,7 @@ function startInfraNode() {
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         sleep 30
     done    
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+    scp -i $SSH_PRIVATE_KEYPATH -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
 
 function startBootstrap() {        
