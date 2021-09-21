@@ -15,6 +15,16 @@ if [ -z "$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK" ]; then
     SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK="yes"
 fi
 
+function GOVC_RETRY (){    
+    govc $@
+    while [ $? -ne 0 ]; do
+        echo "retrying govc $@ in 10 seconds. check the error message from govc and ctrl+c if necessary to resolve the issue."
+        sleep 10
+        govc $@
+    done
+
+}
+
 function createAndConfigureVM() {
     VM_NAME=$1;ROLE=$2;CPU_CORES=$3;MEMORY_MB=$4;DATASTORE=$5;DISK_SIZE=$6;NETWORK=$7;TEMPLATE=$8
 
@@ -32,17 +42,17 @@ function createAndConfigureVM() {
     echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_TEMPLATE -c $CPU_CORES -m $MEMORY_MB $VM_NAME
     govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $TEMPLATE -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     echo Provisioning disk with size "$DISK_SIZE"GB
-    govc vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
-    govc vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE
+    GOVC_RETRY vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
+    GOVC_RETRY vm.change -vm $VM_NAME -e disk.EnableUUID=TRUE
 
     if [ "$ROLE" != "winworker" ]; then
         echo applying network ${NETWORK}
-        govc vm.change -vm $VM_NAME -e guestinfo.hostname=$VM_NAME \
+        GOVC_RETRY vm.change -vm $VM_NAME -e guestinfo.hostname=$VM_NAME \
         -e guestinfo.ignition.config.data.encoding=base64 \
         -e guestinfo.afterburn.initrd.network-kargs="ip=$NETWORK" \
         -e guestinfo.ignition.config.data="$(cat $INSTALL_DIR/$ROLE.ign | base64 -w0)"
     fi
-    govc vm.power -on=true $VM_NAME
+    GOVC_RETRY vm.power -on=true $VM_NAME
 }
 
 function setupInfraNode () {        
@@ -99,6 +109,11 @@ function prepareInstallation() {
     rm -f $INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-*.yaml $INSTALL_DIR/openshift/99_openshift-cluster-api_worker-machineset-*.yaml
 
     export INFRA_NAME=$(cat $INSTALL_DIR/manifests/cluster-infrastructure-02-config.yml | yq eval '.status.infrastructureName' -)
+    if [ -z $INFRA_NAME ]; then 
+        echo "infrastructure name could not be derived.  please check above for errors as to why."
+        return
+    fi
+
     echo ${INFRA_NAME} > $INSTALL_DIR/infra_name
     rm ./$INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-0.yaml
 
@@ -119,11 +134,18 @@ function startInfraNode() {
     sleep 60
     INFRA_IP=
     while [ -z $INFRA_IP ]; do
-        echo Waiting for infra node to get an IP address
+        echo "waiting for infra node to get an IP address"
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         sleep 30
     done    
-    scp -i $SSH_PRIVATE_KEYPATH -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+    scp -i $SSH_PRIVATE_KEYPATH $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+    if [ $? -ne 0 ]; then
+        echo "an error was encountered when attempting to scp the bootstrap ignition to the infra node."
+        echo "read the error carefully.  once understood, this command can be retried by running:"
+        echo "scp -i $SSH_PRIVATE_KEYPATH $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:."        
+        echo "once successful, run startBootstrap"
+        return
+    fi
 }
 
 function startBootstrap() {        
