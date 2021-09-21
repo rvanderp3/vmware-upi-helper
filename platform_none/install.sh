@@ -55,7 +55,7 @@ function setupInfraNode () {
 function getInstallConfigParam() {
     QUERY=$1
     DEFAULT=$2    
-    VALUE=$(cat $INSTALL_DIR/install-config_preserve.yaml | yq -r $QUERY)
+    VALUE=$(cat $INSTALL_DIR/install-config_preserve.yaml | yq eval $QUERY -)
     if [ "null" != "$VALUE" ]; then
         echo $VALUE
         return
@@ -94,7 +94,7 @@ function prepareInstallation() {
     ./openshift-install create manifests --dir=$INSTALL_DIR
     rm -f $INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-*.yaml $INSTALL_DIR/openshift/99_openshift-cluster-api_worker-machineset-*.yaml
 
-    export INFRA_NAME=$(cat $INSTALL_DIR/manifests/cluster-infrastructure-02-config.yml | yq -r '.status.infrastructureName')
+    export INFRA_NAME=$(cat $INSTALL_DIR/manifests/cluster-infrastructure-02-config.yml | yq eval '.status.infrastructureName' -)
     echo ${INFRA_NAME} > $INSTALL_DIR/infra_name
     rm ./$INSTALL_DIR/openshift/99_openshift-cluster-api_master-machines-0.yaml
 
@@ -117,6 +117,7 @@ function startInfraNode() {
     while [ -z $INFRA_IP ]; do
         echo Waiting for infra node to get an IP address
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
+        sleep 30
     done    
     scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
 }
@@ -249,7 +250,7 @@ function destroyCluster() {
     INFRA_NAME=$(cat ${INSTALL_DIR}/infra_name)
     if [[ -z "$INFRA_NAME" ]]; then
         echo "${INSTALL_DIR}/infra_name was not found.  You must manually delete the VMs associated with this cluster."
-        exit 1
+        return 1
     fi    
     echo destroying VMs associated with cluster infra ID ${INFRA_NAME}
     echo destroy bootstrap
