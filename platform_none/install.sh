@@ -138,7 +138,7 @@ function startInfraNode() {
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
         sleep 30
     done    
-    scp -i $SSH_PRIVATE_KEYPATH $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+    scp -i $SSH_PRIVATE_KEYPATH ./igntmp/bootstrap.ign core@$INFRA_IP:.
     if [ $? -ne 0 ]; then
         echo "an error was encountered when attempting to scp the bootstrap ignition to the infra node."
         echo "read the error carefully.  once understood, this command can be retried by running:"
