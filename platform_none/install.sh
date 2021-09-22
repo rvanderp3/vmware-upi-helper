@@ -142,7 +142,7 @@ function startInfraNode() {
     if [ $? -ne 0 ]; then
         echo "an error was encountered when attempting to scp the bootstrap ignition to the infra node."
         echo "read the error carefully.  once understood, this command can be retried by running:"
-        echo "scp -i $SSH_PRIVATE_KEYPATH $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:."        
+        echo "scp -i $SSH_PRIVATE_KEYPATH igntmp/bootstrap.ign core@$INFRA_IP:."        
         echo "the private key at $SSH_PRIVATE_KEYPATH was used to establish a connection to the infra node"
         echo "once successful, run startBootstrap"
         return
