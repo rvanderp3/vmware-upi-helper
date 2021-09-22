@@ -130,7 +130,7 @@ function startInfraNode() {
         echo Waiting for infra node to get an IP address
         INFRA_IP=$(govc vm.info -waitip=true -json=true $VM_NAME | jq -r .VirtualMachines[0].Guest.IpAddress)
     done
-    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK $INSTALL_DIR/bootstrap.ign core@$INFRA_IP:.
+    scp -o StrictHostKeyChecking=$SSH_ENFORCE_INFRA_NODE_HOST_KEY_CHECK ./igntmp/bootstrap.ign core@$INFRA_IP:.
 }
 
 function startBootstrap() {
