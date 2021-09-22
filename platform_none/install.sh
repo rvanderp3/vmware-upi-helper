@@ -150,7 +150,7 @@ function startInfraNode() {
 }
 
 function startBootstrap() {        
-    govc vm.power --reset=true $INFRA_NAME-infra
+    GOVC_RETRY vm.power --reset=true $INFRA_NAME-infra
     envsubst < bootstrap-ignition-bootstrap.ign > $INSTALL_DIR/bootstrap.ign   
     VM_NAME=$INFRA_NAME-bootstrap 
     createAndConfigureVM $VM_NAME bootstrap 2 8192 $GOVC_DATASTORE 40 "$BOOTSTRAP_IP::$SUBNET_GATEWAY:$SUBNET_NETMASK:$VM_NAME::none:$INFRA_VM_IP" $BASE_TEMPLATE
