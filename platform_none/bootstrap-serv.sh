@@ -1,6 +1,7 @@
 #!/bin/bash
 sudo systemctl enable dnsmasq
 sudo systemctl start dnsmasq
+podman pull registry.access.redhat.com/ubi8/python-39
 while [ ! -f "/home/core/bootstrap.ign" ]; do
 sleep 1
 echo "waiting for bootstrap ignition"
