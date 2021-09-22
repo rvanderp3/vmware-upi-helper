@@ -279,7 +279,7 @@ function destroyCluster() {
         echo "${INSTALL_DIR}/infra_name was not found.  You must manually delete the VMs associated with this cluster."
         return 1
     fi    
-    rm- r ./igntmp
+    rm -r ./igntmp
     echo destroying VMs associated with cluster infra ID ${INFRA_NAME}
     echo destroy bootstrap
     govc vm.destroy $INFRA_NAME-bootstrap
