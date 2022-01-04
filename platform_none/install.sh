@@ -210,8 +210,8 @@ function restartWorkers() {
 }
 
 function restartControlPlaneNodes() {
-    govc vm.power -off=true $INFRA_NAME-master*
-    govc vm.power -on=true $INFRA_NAME-master*
+    govc vm.power -off=true $INFRA_NAME-cp*
+    govc vm.power -on=true $INFRA_NAME-cp*
 }
 
 function approveCSRs() {
