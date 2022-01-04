@@ -39,7 +39,7 @@ function createAndConfigureVM() {
     if [ -z "$RESOURCE_POOL" ]; then
         echo Using the default resource pool
     fi
-    echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $BASE_TEMPLATE -c $CPU_CORES -m $MEMORY_MB $VM_NAME
+    echo Creating machine with govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $TEMPLATE -c $CPU_CORES -m $MEMORY_MB $VM_NAME
     govc vm.clone -net="$GOVC_NETWORK" -folder=$INFRA_NAME -on=false $RESOURCE_POOL -vm $TEMPLATE -c $CPU_CORES -m $MEMORY_MB -ds $DATASTORE $VM_NAME
     echo Provisioning disk with size "$DISK_SIZE"GB
     GOVC_RETRY vm.disk.change -vm $VM_NAME -size="$DISK_SIZE"GB
