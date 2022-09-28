@@ -1,1 +1,0 @@
-{"ignition":{"config":{"merge":[{"source":"http://$INFRA_VM_IP:9999/bootstrap.ign"}]},"security":{"tls":{"certificateAuthorities":[]}},"version":"3.1.0"}}

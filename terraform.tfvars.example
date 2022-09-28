@@ -1,0 +1,70 @@
+// ID identifying the cluster to create. Use your username so that resources created can be tracked back to you.
+cluster_id = "example-cluster"
+
+// Domain of the cluster. This should be "${cluster_id}.${base_domain}".
+cluster_domain = "example-cluster.devcluster.openshift.com"
+
+// Base domain from which the cluster domain is a subdomain.
+base_domain = "devcluster.openshift.com"
+
+// Name of the vSphere server. The dev cluster is on "vcsa.vmware.devcluster.openshift.com".
+vsphere_server = "vcsa.vmware.devcluster.openshift.com"
+
+// User on the vSphere server.
+vsphere_user = "YOUR_USER"
+
+// Password of the user on the vSphere server.
+vsphere_password = "YOUR_PASSWORD"
+
+// Name of the vSphere cluster. The dev cluster is "devel".
+vsphere_cluster = "devel"
+
+// Name of the vSphere data center. The dev cluster is "dc1".
+vsphere_datacenter = "dc1"
+
+// Name of the vSphere data store to use for the VMs. The dev cluster uses "nvme-ds1".
+vsphere_datastore = "nvme-ds1"
+
+// Name of the vSphere portgroup used by the VMs.
+vm_network="ci-segment-15"
+
+// Name of the VM template to clone to create VMs for the cluster. The dev cluster has a template named "rhcos-latest".
+vm_template = "rhcos-latest"
+
+// The machine_cidr where IP addresses will be assigned for cluster nodes.
+// Additionally, IPAM will assign IPs based on the network ID. 
+machine_cidr = "192.168.20.0/24"
+
+// The number of control plane VMs to create. Default is 3.
+control_plane_count = 3
+
+// The number of compute VMs to create. Default is 3.
+compute_count = 2
+
+// Ignition config path for the control plane machines
+control_plane_ignition_path = "./master.ign"
+
+// Ignition config path for the compute machines
+compute_ignition_path = "./worker.ign"
+
+// The IP address to assign to the load balancer VM.
+lb_ip_address = "10.0.0.2"
+
+// The IP address to assign to the bootstrap VM.
+//bootstrap_ip_address = "10.0.0.10"
+
+// The IP addresses to assign to the control plane VMs. The length of this list
+// must match the value of control_plane_count.
+//control_plane_ip_addresses = ["10.0.0.20", "10.0.0.21", "10.0.0.22"]
+
+// The IP addresses to assign to the compute VMs. The length of this list must
+// match the value of compute_count.
+//compute_ip_addresses = ["10.0.0.30", "10.0.0.31"]
+
+/////////////////////////////////////////////////////////////////
+// winc vm deployment
+/////////////////////////////////////////////////////////////////
+// winc_vm_template = "windows-server-2004-template"
+// winc_vm_names = ["winc-vm0", "winc-vm1"]
+// winc_memory = 16384
+// winc_num_cpus = 4
